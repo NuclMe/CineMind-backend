@@ -1,0 +1,9 @@
+Flask
+flask_sqlalchemy
+flask_bcrypt
+flask_cors
+transformers
+keybert
+torch
+requests
+beautifulsoup4
