@@ -12,7 +12,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db.init_app(app)  # ← ПРАВИЛЬНО! (НЕ створюй db = SQLAlchemy(app))
+db.init_app(app)
 bcrypt = Bcrypt(app)
 
 
@@ -58,8 +58,6 @@ def login():
 
 @app.route('/logout', methods=['POST'])
 def logout():
-    # Якщо б у тебе була сесія:
-    # session.pop('user_id', None)
     return jsonify({'message': 'Logged out successfully'}), 200
 
 
@@ -82,7 +80,7 @@ def analyze():
     movie_title = data.get('movieTitle')
     genres = data.get('genres')
     custom_review = data.get('customReview')
-    user_id = data.get('userId')  # фронтенд має надсилати userId
+    user_id = data.get('userId')
 
     # Вибір тексту для аналізу:
     text = ""
@@ -109,11 +107,9 @@ def analyze():
         db.session.add(new_entry)
         db.session.commit()
 
-    # --- Викликаємо AI (можна підставити свою функцію) ---
     result = run_analysis(text)
 
     return jsonify(result), 200
-
 
 
 # --- Ініціалізація БД ---

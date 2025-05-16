@@ -9,15 +9,17 @@ API_KEY_TMDB = os.getenv("API_KEY_TMDB")
 
 print(API_KEY_GUARDIAN)
 
+
 def clean_text(text: str) -> str:
     lines = text.splitlines()
     cleaned_lines = [line.strip() for line in lines if line.strip()]
     return "\n\n".join(cleaned_lines)
 
+
 def search_guardian_reviews(title: str):
     url = "https://content.guardianapis.com/search"
     params = {
-        "q": f"{title} review",  # використовуємо переданий title
+        "q": f"{title} review",
         "section": "film",
         "tag": "film/film",
         "type": "article",
@@ -46,6 +48,7 @@ def get_movie_id(title):
         if results:
             return results[0]['id']
     return None
+
 
 def get_movie_reviews(movie_id):
     url = f"https://api.themoviedb.org/3/movie/{movie_id}/reviews"

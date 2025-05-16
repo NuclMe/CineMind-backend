@@ -2,7 +2,6 @@ from transformers import BartTokenizer, BartForConditionalGeneration, pipeline
 from keybert import KeyBERT
 import torch
 
-# --- Підготовка моделей один раз
 tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
 sentiment_pipeline = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
@@ -10,7 +9,7 @@ kw_model = KeyBERT(model='all-MiniLM-L6-v2')
 
 def run_analysis(review_text):
     # 1️⃣ Видалення спойлерів (dummy зараз)
-    clean_text_en = review_text  # Можна вставити реальну модель пізніше
+    clean_text_en = review_text
 
     # 2️⃣ Узагальнення
     inputs = tokenizer([clean_text_en], max_length=1024, return_tensors='pt', truncation=True)
