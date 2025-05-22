@@ -53,7 +53,15 @@ def login():
     if not user or not bcrypt.check_password_hash(user.password, password):
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    return jsonify({'message': 'Login successful', 'user_id': user.id}), 200
+    return jsonify({
+        'message': 'Login successful',
+        'user_id': user.id,
+        'username': user.username,
+        'age': user.age,
+        'gender': user.gender,
+        'genres': user.genres.split(',') if user.genres else []
+    }), 200
+
 
 
 @app.route('/logout', methods=['POST'])
@@ -81,6 +89,7 @@ def analyze():
     genres = data.get('genres')
     custom_review = data.get('customReview')
     user_id = data.get('userId')
+    age = data.get('age')
 
     # Вибір тексту для аналізу:
     text = ""
@@ -107,7 +116,7 @@ def analyze():
         db.session.add(new_entry)
         db.session.commit()
 
-    result = run_analysis(text)
+    result = run_analysis(text, age=age)
 
     return jsonify(result), 200
 

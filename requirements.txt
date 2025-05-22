@@ -2,8 +2,12 @@ Flask
 flask_sqlalchemy
 flask_bcrypt
 flask_cors
-transformers
+
+transformers>=4.36.0
+torch>=2.1.0
+sentence-transformers
 keybert
-torch
+
 requests
 beautifulsoup4
+sentencepiece>=0.1.99
