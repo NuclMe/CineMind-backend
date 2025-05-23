@@ -1,27 +1,51 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from keybert import KeyBERT
-from transformers import T5Tokenizer, T5ForConditionalGeneration, BartTokenizer, BartForConditionalGeneration
+from transformers import (
+    T5Tokenizer, T5ForConditionalGeneration,
+    BartTokenizer, BartForConditionalGeneration
+)
 import torch
 
-# Модель BART для узагальнення (для дорослих)
+# BART для повного summary
 bart_tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 bart_model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
 
-# Модель для аналізу тональності
+# Sentiment pipeline
 sentiment_pipeline = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
 
-# Модель T5 для коротших адаптованих summary
+# T5 для коротших summary
 t5_tokenizer = T5Tokenizer.from_pretrained("t5-small")
 t5_model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
 # Ключові слова
 kw_model = KeyBERT(model='all-MiniLM-L6-v2')
 
-# Модель спрощення тексту (Keep It Simple)
+# Модель спрощення тексту
 simple_tokenizer = AutoTokenizer.from_pretrained("philippelaban/keep_it_simple")
 simple_model = AutoModelForCausalLM.from_pretrained("philippelaban/keep_it_simple")
 
+# ✅ Робоча модель для виявлення спойлерів
+spoiler_detector = pipeline("text-classification", model="eesuan/imdb-spoiler-distilbert")
+
 # ————————————————————————————————————————————
+def remove_spoilers(text, threshold=0.8):
+    sentences = text.split('. ')
+    non_spoilers = []
+    for s in sentences:
+        try:
+            result = spoiler_detector(s[:512])[0]
+            label = result['label']
+            score = result['score']
+            print(f"{label} ({score:.2f}) → {s}")
+
+            if label == 'LABEL_0' or score < threshold:
+                non_spoilers.append(s)
+        except Exception as e:
+            print("Error:", e)
+            continue
+    return '. '.join(non_spoilers)
+
+
 def simplify_with_t5(text, max_len=120):
     input_text = "summarize: " + text
     inputs = t5_tokenizer.encode(input_text, return_tensors="pt", max_length=512, truncation=True)
@@ -61,14 +85,14 @@ def run_summary_adapted(text, age=None):
 
 # ————————————————————————————————————————————
 def run_analysis(review_text, age=None):
-    # 1️⃣ Очистка від спойлерів (тимчасово — без змін)
-    clean_text = review_text
+    # 1️⃣ Видалення спойлерів
+    clean_text = remove_spoilers(review_text)
 
-    # 2️⃣ Адаптивне узагальнення (відразу з урахуванням віку)
+    # 2️⃣ Адаптивне узагальнення
     adapted_summary = run_summary_adapted(clean_text, age)
 
     # 3️⃣ Аналіз тональності
-    sentiment_result = sentiment_pipeline(adapted_summary[:512])[0]
+    sentiment_result = sentiment_pipeline(adapted_summary)[0]
     sentiment = sentiment_result['label']
 
     # 4️⃣ Витяг ключових слів
