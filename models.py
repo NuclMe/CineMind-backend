@@ -2,7 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 import datetime
 
 db = SQLAlchemy()
-
+language = db.Column(db.String(10), default='en')
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -11,6 +11,7 @@ class User(db.Model):
     gender = db.Column(db.String(20))
     age = db.Column(db.Integer)
     genres = db.Column(db.String(200))
+    language = language
 
 
 class SearchHistory(db.Model):

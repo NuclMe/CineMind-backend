@@ -6,6 +6,7 @@ from models import db, User, SearchHistory
 from ai_engine import run_analysis
 import datetime
 from external_api import search_guardian_reviews,get_movie_id,get_movie_reviews
+from translation_utils import translate_text
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -24,6 +25,7 @@ def signup():
     password = data.get('password')
     gender = data.get('gender')
     age = data.get('age')
+    language = data.get('language', 'en')
     genres = ','.join(data.get('genres', []))
 
     if User.query.filter_by(username=username).first():
@@ -35,7 +37,9 @@ def signup():
         password=hashed_pw,
         gender=gender,
         age=age,
-        genres=genres)
+        language=language,  # додано
+        genres=genres
+    )
     db.session.add(new_user)
     db.session.commit()
 
@@ -84,6 +88,7 @@ def get_user_genres(user_id):
 def analyze():
     data = request.get_json()
     print(f"🌐 Получен запрос на анализ: {data}")
+
     source = data.get('source')
     movie_title = data.get('movieTitle')
     genres = data.get('genres')
@@ -91,7 +96,10 @@ def analyze():
     user_id = data.get('userId')
     age = data.get('age')
 
-    # Вибір тексту для аналізу:
+    user = User.query.get(user_id)
+    user_lang = user.language if user and user.language else 'en'
+
+    # --- Вибір тексту для аналізу ---
     text = ""
     if source == 'guardian':
         text = search_guardian_reviews(movie_title) or "No review found."
@@ -109,14 +117,25 @@ def analyze():
     else:
         return jsonify({'error': 'Invalid source'}), 400
 
-    # --- ЗАПИСУЄМО В ІСТОРІЮ ---
+    # --- Записуємо в історію ---
     if user_id and movie_title:
         print(f"📌 Сохраняем в историю: user_id={user_id}, movie_title={movie_title}, genres={genres}")
         new_entry = SearchHistory(user_id=user_id, movie_title=movie_title)
         db.session.add(new_entry)
         db.session.commit()
 
+    # --- Перекладаємо текст перед аналізом ---
+    if user_lang != 'en':
+        text = translate_text(text, 'en')
+
+    # --- Аналіз ---
     result = run_analysis(text, age=age)
+
+    # --- Перекладаємо результат назад ---
+    if user_lang != 'en':
+        result['summary'] = translate_text(result['summary'], user_lang)
+        result['sentiment'] = translate_text(result['sentiment'], user_lang)
+        result['keywords'] = [translate_text(kw, user_lang) for kw in result['keywords']]
 
     return jsonify(result), 200
 

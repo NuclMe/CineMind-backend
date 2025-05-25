@@ -54,8 +54,10 @@ def get_movie_reviews(movie_id):
     url = f"https://api.themoviedb.org/3/movie/{movie_id}/reviews"
     params = {"api_key": API_KEY_TMDB, "language": "en-US"}
     response = requests.get(url, params=params)
+
     if response.status_code == 200:
         reviews = response.json().get("results", [])
         if reviews:
-            return reviews[0]['content']
-    return None
+            combined_reviews = "\n".join(r['content'] for r in reviews if 'content' in r)
+            return combined_reviews
+    return "No user reviews found."
