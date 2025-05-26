@@ -7,6 +7,14 @@ from ai_engine import run_analysis
 import datetime
 from external_api import search_guardian_reviews,get_movie_id,get_movie_reviews
 from translation_utils import translate_text
+import os
+from dotenv import load_dotenv
+import requests
+from bs4 import BeautifulSoup
+
+load_dotenv()
+API_KEY_GUARDIAN = os.getenv("API_KEY_GUARDIAN")
+API_KEY_TMDB = os.getenv("API_KEY_TMDB")
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -18,33 +26,87 @@ bcrypt = Bcrypt(app)
 
 
 # --- Регістрація ---
-@app.route('/signup', methods=['POST'])
-def signup():
+@app.route('/analyze', methods=['POST'])
+def analyze():
     data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    gender = data.get('gender')
+    print(f"🌐 Получен запрос на анализ: {data}")
+
+    source = data.get('source')
+    movie_title = data.get('movieTitle')
+    genres = data.get('genres')
+    custom_review = data.get('customReview')
+    user_id = data.get('userId')
     age = data.get('age')
-    language = data.get('language', 'en')
-    genres = ','.join(data.get('genres', []))
 
-    if User.query.filter_by(username=username).first():
-        return jsonify({'error': 'User already exists'}), 400
+    user = User.query.get(user_id)
+    user_lang = user.language if user and user.language else 'en'
 
-    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
-    new_user = User(
-        username=username,
-        password=hashed_pw,
-        gender=gender,
-        age=age,
-        language=language,  # додано
-        genres=genres
-    )
-    db.session.add(new_user)
-    db.session.commit()
+    text = ""
+    movie_id = None
 
-    return jsonify({'message': 'User created successfully'}), 201
+    # --- Вибір тексту ---
+    if source == 'guardian':
+        text = search_guardian_reviews(movie_title) or "No review found."
+    elif source == 'tmdb':
+        if movie_title:
+            movie_id = get_movie_id(movie_title)
+            if movie_id:
+                text = get_movie_reviews(movie_id) or "No user reviews found."
+            else:
+                return jsonify({'error': 'Movie not found in TMDb'}), 404
+        else:
+            return jsonify({'error': 'Movie title is required for TMDb'}), 400
+    elif source == 'custom':
+        text = custom_review or "No custom review provided."
+    else:
+        return jsonify({'error': 'Invalid source'}), 400
 
+    # --- Якщо жанри не передані — отримаємо їх з TMDb ---
+    if not genres:
+        movie_id = get_movie_id(movie_title)
+        if movie_id:
+            tmdb_url = f"https://api.themoviedb.org/3/movie/{movie_id}"
+            params = {"api_key": API_KEY_TMDB, "language": "en-US"}
+            resp = requests.get(tmdb_url, params=params)
+            if resp.status_code == 200:
+                movie_data = resp.json()
+                genres_list = [g['name'] for g in movie_data.get('genres', [])]
+                genres = ','.join(genres_list)
+                print(f"🎭 Отримано жанри з TMDb: {genres}")
+            else:
+                print("⚠️ Не вдалося отримати жанри з TMDb")
+                genres = None
+        else:
+            print("❌ Не знайдено movie_id за назвою")
+
+    # --- Запис у SearchHistory ---
+    if user_id and movie_title:
+        print(f"📌 Зберігаємо в історію: user_id={user_id}, movie_title={movie_title}, genres={genres}")
+        new_entry = SearchHistory(user_id=user_id, movie_title=movie_title, genres=genres)
+        db.session.add(new_entry)
+        db.session.commit()
+
+    # --- Оновлюємо genres в профілі користувача ---
+    if user and genres:
+        print(f"🔁 Оновлюємо жанри користувача: {genres}")
+        user.genres = genres
+        db.session.commit()
+
+    # --- Переклад вхідного тексту ---
+    if user_lang != 'en':
+        text = translate_text(text, 'en')
+
+    # --- Аналіз ---
+    print("🧠 Аналізуємо текст:", text[:300])
+    result = run_analysis(text, age=age)
+
+    # --- Переклад результатів ---
+    if user_lang != 'en':
+        result['summary'] = translate_text(result['summary'], user_lang)
+        result['sentiment'] = translate_text(result['sentiment'], user_lang)
+        result['keywords'] = [translate_text(kw, user_lang) for kw in result['keywords']]
+
+    return jsonify(result), 200
 
 # --- Логін ---
 @app.route('/login', methods=['POST'])
@@ -81,63 +143,6 @@ def get_user_genres(user_id):
 
     genres = user.genres.split(',') if user.genres else []
     return jsonify({'genres': genres}), 200
-
-
-# --- Аналіз ---
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    data = request.get_json()
-    print(f"🌐 Получен запрос на анализ: {data}")
-
-    source = data.get('source')
-    movie_title = data.get('movieTitle')
-    genres = data.get('genres')
-    custom_review = data.get('customReview')
-    user_id = data.get('userId')
-    age = data.get('age')
-
-    user = User.query.get(user_id)
-    user_lang = user.language if user and user.language else 'en'
-
-    # --- Вибір тексту для аналізу ---
-    text = ""
-    if source == 'guardian':
-        text = search_guardian_reviews(movie_title) or "No review found."
-    elif source == 'tmdb':
-        if movie_title:
-            movie_id = get_movie_id(movie_title)
-            if movie_id:
-                text = get_movie_reviews(movie_id) or "No user reviews found."
-            else:
-                return jsonify({'error': 'Movie not found in TMDb'}), 404
-        else:
-            return jsonify({'error': 'Movie title is required for TMDb'}), 400
-    elif source == 'custom':
-        text = custom_review or "No custom review provided."
-    else:
-        return jsonify({'error': 'Invalid source'}), 400
-
-    # --- Записуємо в історію ---
-    if user_id and movie_title:
-        print(f"📌 Сохраняем в историю: user_id={user_id}, movie_title={movie_title}, genres={genres}")
-        new_entry = SearchHistory(user_id=user_id, movie_title=movie_title)
-        db.session.add(new_entry)
-        db.session.commit()
-
-    # --- Перекладаємо текст перед аналізом ---
-    if user_lang != 'en':
-        text = translate_text(text, 'en')
-
-    # --- Аналіз ---
-    result = run_analysis(text, age=age)
-
-    # --- Перекладаємо результат назад ---
-    if user_lang != 'en':
-        result['summary'] = translate_text(result['summary'], user_lang)
-        result['sentiment'] = translate_text(result['sentiment'], user_lang)
-        result['keywords'] = [translate_text(kw, user_lang) for kw in result['keywords']]
-
-    return jsonify(result), 200
 
 
 # --- Ініціалізація БД ---

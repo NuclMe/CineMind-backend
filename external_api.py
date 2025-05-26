@@ -7,8 +7,6 @@ load_dotenv()
 API_KEY_GUARDIAN = os.getenv("API_KEY_GUARDIAN")
 API_KEY_TMDB = os.getenv("API_KEY_TMDB")
 
-print(API_KEY_GUARDIAN)
-
 
 def clean_text(text: str) -> str:
     lines = text.splitlines()
