@@ -1,16 +1,13 @@
 from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from models import db, User, SearchHistory
 from ai_engine import run_analysis
-import datetime
 from external_api import search_guardian_reviews,get_movie_id,get_movie_reviews
 from translation_utils import translate_text
 import os
 from dotenv import load_dotenv
 import requests
-from bs4 import BeautifulSoup
 
 load_dotenv()
 API_KEY_GUARDIAN = os.getenv("API_KEY_GUARDIAN")
@@ -26,6 +23,33 @@ bcrypt = Bcrypt(app)
 
 
 # --- Регістрація ---
+@app.route('/signup', methods=['POST'])
+def signup():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    gender = data.get('gender')
+    age = data.get('age')
+    genres = ','.join(data.get('genres', []))
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'User already exists'}), 400
+
+    language = data.get('language', 'en')
+    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
+    new_user = User(
+        username=username,
+        password=hashed_pw,
+        gender=gender,
+        age=age,
+        language=language,
+        genres=genres)
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({'message': 'User created successfully'}), 201
+
+
 @app.route('/analyze', methods=['POST'])
 def analyze():
     data = request.get_json()
@@ -39,7 +63,7 @@ def analyze():
     age = data.get('age')
 
     user = User.query.get(user_id)
-    user_lang = user.language if user and user.language else 'en'
+    user_lang = data.get('language') or (user.language if user and user.language else 'en')
 
     text = ""
     movie_id = None
@@ -108,6 +132,7 @@ def analyze():
 
     return jsonify(result), 200
 
+
 # --- Логін ---
 @app.route('/login', methods=['POST'])
 def login():
@@ -129,7 +154,6 @@ def login():
     }), 200
 
 
-
 @app.route('/logout', methods=['POST'])
 def logout():
     return jsonify({'message': 'Logged out successfully'}), 200
@@ -141,8 +165,20 @@ def get_user_genres(user_id):
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
+    # Якщо жанри не збережено або вони порожні — даємо за гендером
+    if not user.genres or user.genres.strip() == "":
+        print("⚠️ Жанри не задані — підставляємо за gender")
+        if user.gender == 'male':
+            default_genres = ['Action', 'Sci-Fi', 'Thriller']
+        elif user.gender == 'female':
+            default_genres = ['Romance', 'Drama', 'Comedy']
+        else:
+            default_genres = ['Adventure', 'Drama']  # для інших випадків
+        return jsonify({'genres': default_genres})
+
+    # Інакше — розбиваємо на список
     genres = user.genres.split(',') if user.genres else []
-    return jsonify({'genres': genres}), 200
+    return jsonify({'genres': genres})
 
 
 # --- Ініціалізація БД ---

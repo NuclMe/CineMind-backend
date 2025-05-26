@@ -4,7 +4,6 @@ from transformers import (
     T5Tokenizer, T5ForConditionalGeneration,
     BartTokenizer, BartForConditionalGeneration
 )
-import torch
 
 # BART для повного summary
 bart_tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
