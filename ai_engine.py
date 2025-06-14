@@ -80,7 +80,12 @@ def run_summary_adapted(text, age=None):
     elif age <= 17:
         return simplify_with_t5(text, max_len=120)
     else:
-        return summarize_with_bart(text)
+        # Для дорослих — залежно від довжини тексту
+        if len(text) > 1000:
+            return summarize_with_bart(text, max_len=510, min_len=490)
+        else:
+            return summarize_with_bart(text, max_len=200, min_len=100)
+
 
 # ————————————————————————————————————————————
 def run_analysis(review_text, age=None):
